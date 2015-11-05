@@ -29,23 +29,26 @@ EXTERN  wsprintfA : PROC
 	outStrnA DB "1st number: ", 0
 	outStrnB DB "2nd number: ", 0
 	outStrnErr DB "Do you know what 'decimal' mean? Try again:", 13, 10, 0
-	outStrnResult DB "output (in hex):", 13, 10, 0
-	ten DB 10
+	outStrnResult DB " (output in hex)", 13, 10, 0
+	minus DB "-", 0
+	ten DD 10
+	hex DD 16
 	
 .DATA
 	; Ininitialized data of the program.
 	din DD ? ; input descriptor, 4 bytes
 	dout DD ?
-	len DD ? ; numb of output symbols of B (B is the first number in decimal)
+	len DD ?
 	lenA DD ? ; numb of output symbols of A (A is the first number in decimal)
 	bufA DB 200 DUP (?) ; buffer for A, 200 bytes 
+	lenB DD ?
 	bufB DB 200 DUP (?)
-	lenB DD ? ; numb of output symbols of B (B is the first number in decimal)
-	strnA DD ?
 	A DD ?
 	B DD ?
-	f1 DD 0 ; f1 = 1 if A < 0, f1 = 0 otherwise 
-	f2 DD 0
+	lenAB DD ?
+	bufAB DB 200 DUP (?) ; buffer for A*B, 200 bytes 
+	f1 DB 0 ; f1 = 1 if A < 0, f1 = 0 otherwise 
+	f2 DB 0
 	
 .CODE ; Section for code.
 	main PROC
@@ -60,7 +63,7 @@ EXTERN  wsprintfA : PROC
 		
 		COMMENT !
 		---------
-			1. Getting input (numbers A and B as strings).
+			1. Getting input (numbers A and B as strings)
 		---------
 		!
 
@@ -112,7 +115,7 @@ REENTER:
 		
 		COMMENT !
 		---------
-			2. Converting strings to decimal numbers.
+			2. Converting strings to decimal numbers
 		---------
 		!
 		
@@ -140,12 +143,6 @@ CONVERT1_CONTINUE:
 		ADD EAX, EBX ; add our digit to sum
 		INC ESI	; go to next symbol
 		LOOP CONVERT1 ; next iteration
-		CMP f1, 0
-		JE	NOTNEG1
-		; if A < 0
-		SUB EAX, 1 ; twos-complement
-		NOT EAX ; inverse bits
-NOTNEG1:
 		MOV A, EAX
 		; B
 		MOV ECX, lenB
@@ -171,13 +168,65 @@ CONVERT2_CONTINUE :
 		ADD EAX, EBX
 		INC ESI
 		LOOP CONVERT2
-		CMP f2, 0
-		JE	NOTNEG2
-		SUB EAX, 1
-		NOT EAX
-NOTNEG2:
 		MOV B, EAX
 
+		COMMENT !
+		---------
+			3. Convert A * B to hex
+		!
+		
+		; multiply B (EAX) and A, save result to EAX
+		MUL A
+		; convert to hex
+		XOR ECX, ECX
+CONVERT_HEX:
+		INC ECX
+		DIV hex
+		PUSH EDX
+		CMP AX, 0
+		JE CONVERT_HEX_END 
+		JMP CONVERT_HEX
+CONVERT_HEX_END:
+		; convert to string
+		MOV ESI, OFFSET bufAB
+GET_HEX_STRING:
+		POP EBX
+		CMP EBX, 9
+		JLE LESS_THEN_10
+		ADD EBX, 7 ; ASCII
+LESS_THEN_10:
+		ADD EBX, '0'
+		MOV [ESI], EBX
+		INC ESI
+		LOOP GET_HEX_STRING
+		; display result
+		MOV AH, f1
+		MOV AL, f2
+		CMP AH, AL
+		JE POSITIVE
+		PUSH 0
+		PUSH OFFSET len
+		PUSH 1
+		PUSH OFFSET minus
+		PUSH dout
+		CALL WriteConsoleA@20
+POSITIVE:
+		PUSH OFFSET bufAB
+		CALL lstrlenA@4
+		PUSH 0
+		PUSH OFFSET len
+		PUSH EAX
+		PUSH OFFSET bufAB
+		PUSH dout
+		CALL WriteConsoleA@20
+		PUSH OFFSET outStrnResult
+		CALL lstrlenA@4
+		PUSH 0
+		PUSH OFFSET len
+		PUSH EAX
+		PUSH OFFSET outStrnResult
+		PUSH dout
+		CALL WriteConsoleA@20
 		PUSH 0 ; exit code
 		CALL ExitProcess@4
 ERR:
@@ -191,7 +240,5 @@ ERR:
 		PUSH dout; 1st
 		CALL WriteConsoleA@20
 		JMP REENTER
-		PUSH 0 ; exit code
-		CALL ExitProcess@4
 	main ENDP
 	END main
